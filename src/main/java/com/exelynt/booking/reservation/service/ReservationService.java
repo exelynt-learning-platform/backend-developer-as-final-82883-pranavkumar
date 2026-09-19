@@ -61,7 +61,7 @@ public class ReservationService {
     @Transactional
     public ReservationResponse create(ReservationCreateRequest request) {
         AppUserPrincipal principal = SecurityUtils.requireCurrentPrincipal();
-        Resource resource = resourceService.getEntityForUpdateOrThrow(request.resourceId());
+        Resource resource = resourceService.getEntityOrThrow(request.resourceId());
         requireActive(resource);
         User owner = userService.getById(principal.getUserId());
 
@@ -69,6 +69,8 @@ public class ReservationService {
         // rather than a 403: the booking is still created, it just is not approved
         // by the person who requested it.
         ReservationStatus status = principal.isAdmin() ? request.statusOrDefault() : ReservationStatus.PENDING;
+        resource = resourceService.getEntityForUpdateOrThrow(request.resourceId());
+        requireActive(resource);
         requireFreeSlot(resource, request.startTime(), request.endTime(), status, null);
 
         Reservation saved = reservationRepository.save(new Reservation(
