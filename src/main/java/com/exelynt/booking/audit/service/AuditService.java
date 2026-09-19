@@ -27,17 +27,21 @@ public class AuditService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void record(String actor, AuditAction action, String entityType, Object entityId) {
+    public void recordForEntity(String actor, AuditAction action, String entityType, Object entityId) {
+        write(actor, action, entityType, entityId);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordForActor(String actor, AuditAction action) {
+        write(actor, action, null, null);
+    }
+
+    private void write(String actor, AuditAction action, String entityType, Object entityId) {
         String resolvedActor = (actor == null || actor.isBlank()) ? "anonymous" : actor;
         String resolvedEntityId = entityId == null ? null : String.valueOf(entityId);
         auditLogRepository.save(new AuditLog(
                 resolvedActor, action, entityType, resolvedEntityId, CorrelationIdFilter.current()));
         log.info("audit action={} actor={} entityType={} entityId={}",
                 action, resolvedActor, entityType, resolvedEntityId);
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void record(String actor, AuditAction action) {
-        record(actor, action, null, null);
     }
 }

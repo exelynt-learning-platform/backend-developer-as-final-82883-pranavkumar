@@ -62,7 +62,7 @@ public class AuthService {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.username(), request.password()));
         } catch (AuthenticationException ex) {
-            auditService.record(request.username(), AuditAction.LOGIN_FAILURE, ENTITY_TYPE, null);
+            auditService.recordForEntity(request.username(), AuditAction.LOGIN_FAILURE, ENTITY_TYPE, null);
             log.info("login_failed username={}", request.username());
             // Same message for unknown user and wrong password: no account enumeration.
             throw new UnauthorizedException("Invalid username or password");
@@ -72,7 +72,7 @@ public class AuthService {
                 .orElseThrow(() -> new UnauthorizedException("Invalid username or password"));
 
         TokenResponse response = issueTokenPair(user);
-        auditService.record(user.getUsername(), AuditAction.LOGIN_SUCCESS, ENTITY_TYPE, user.getId());
+        auditService.recordForEntity(user.getUsername(), AuditAction.LOGIN_SUCCESS, ENTITY_TYPE, user.getId());
         log.info("login_succeeded username={}", user.getUsername());
         return response;
     }
@@ -92,21 +92,26 @@ public class AuthService {
     public TokenResponse refresh(String rawRefreshToken) {
         Optional<StoredRefreshToken> stored = refreshTokenStore.find(rawRefreshToken);
         if (stored.isEmpty()) {
-            auditService.record(null, AuditAction.TOKEN_REFRESH_FAILURE, ENTITY_TYPE, null);
+            auditService.recordForEntity(null, AuditAction.TOKEN_REFRESH_FAILURE, ENTITY_TYPE, null);
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN);
         }
 
         StoredRefreshToken token = stored.get();
         if (token.isReplayOfConsumedToken()) {
             int revoked = refreshTokenStore.revokeAllForUser(token.userId());
-            auditService.record(token.username(), AuditAction.REFRESH_TOKEN_REUSE_DETECTED,
+            auditService.recordForEntity(token.username(), AuditAction.REFRESH_TOKEN_REUSE_DETECTED,
                     ENTITY_TYPE, token.userId());
             log.warn("refresh_token_reuse_detected username={} revokedTokens={} - "
                     + "all sessions for this user have been ended", token.username(), revoked);
+            // The revocation above and this 401 are deliberately in different
+            // transactions: revokeAllForUser runs REQUIRES_NEW, and the audit row
+            // likewise, so both survive the rollback this throw causes. Joining
+            // them to the caller's transaction would undo the revocation - which
+            // is exactly the "tidy-up" to resist here.
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN);
         }
         if (!token.isUsable()) {
-            auditService.record(token.username(), AuditAction.TOKEN_REFRESH_FAILURE, ENTITY_TYPE, token.userId());
+            auditService.recordForEntity(token.username(), AuditAction.TOKEN_REFRESH_FAILURE, ENTITY_TYPE, token.userId());
             throw new UnauthorizedException(INVALID_REFRESH_TOKEN);
         }
 
@@ -115,7 +120,7 @@ public class AuthService {
         refreshTokenStore.revoke(token);
 
         TokenResponse response = issueTokenPair(user);
-        auditService.record(user.getUsername(), AuditAction.TOKEN_REFRESH, ENTITY_TYPE, user.getId());
+        auditService.recordForEntity(user.getUsername(), AuditAction.TOKEN_REFRESH, ENTITY_TYPE, user.getId());
         log.info("token_refreshed username={}", user.getUsername());
         return response;
     }
@@ -138,7 +143,7 @@ public class AuthService {
                         "Logout could not revoke the access token; please retry", ex);
             }
         }
-        auditService.record(username, AuditAction.LOGOUT, ENTITY_TYPE, userId);
+        auditService.recordForEntity(username, AuditAction.LOGOUT, ENTITY_TYPE, userId);
         log.info("logout username={}", username);
     }
 

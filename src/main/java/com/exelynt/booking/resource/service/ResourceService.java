@@ -83,6 +83,6 @@ public class ResourceService {
     }
 
     private void audit(AuditAction action, Long id) {
-        auditService.record(SecurityUtils.currentUsername().orElse(null), action, ENTITY_TYPE, id);
+        auditService.recordForEntity(SecurityUtils.currentUsername().orElse(null), action, ENTITY_TYPE, id);
     }
 }
