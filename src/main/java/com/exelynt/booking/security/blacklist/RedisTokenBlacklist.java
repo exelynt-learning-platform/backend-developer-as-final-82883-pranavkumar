@@ -4,6 +4,9 @@ import java.time.Duration;
 import java.time.Instant;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.stereotype.Component;
 
 /**
@@ -25,7 +28,7 @@ import org.springframework.stereotype.Component;
  * worse than a visible error.</p>
  */
 @Component
-public class RedisTokenBlacklist implements TokenBlacklist {
+public class RedisTokenBlacklist implements TokenBlacklist, ApplicationRunner {
 
     private static final String KEY_PREFIX = "booking:blacklist:jti:";
     private static final String VALUE = "revoked";
@@ -34,6 +37,21 @@ public class RedisTokenBlacklist implements TokenBlacklist {
 
     public RedisTokenBlacklist(StringRedisTemplate redisTemplate) {
         this.redisTemplate = redisTemplate;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) {
+        if (redisTemplate.getConnectionFactory() == null) {
+            throw new IllegalStateException("Redis connection factory is not configured");
+        }
+        RedisConnection connection = redisTemplate.getConnectionFactory().getConnection();
+        try {
+            connection.ping();
+        } catch (RuntimeException ex) {
+            throw new IllegalStateException("Redis is required but unavailable", ex);
+        } finally {
+            connection.close();
+        }
     }
 
     @Override
